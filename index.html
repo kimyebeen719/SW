@@ -3,41 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Campus Calendar - 대학생 일정 관리</title>
-    <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
-    <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
-    <link href="[https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap](https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap)" rel="stylesheet">
+    <title>Campus Calendar</title>
     <style>
-        /* -------------------------------------------------------------------------- */
-        /* 1. 글로벌 스타일 및 테마 변수                                                */
-        /* -------------------------------------------------------------------------- */
-        :root {
-            --primary-color: #4f46e5;
-            --primary-hover: #4338ca;
-            --danger-color: #ef4444;
-            --danger-hover: #dc2626;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --bg-body: #f9fafb;
-            --bg-card: #ffffff;
-            --border-color: #e5e7eb;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --radius: 12px;
+        :root { --primary: #4f46e5; --danger: #ef4444; --text: #1f2937; --bg: #f9fafb; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        header { width: 100%; max-width: 800px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .main-box { width: 100%; max-width: 800px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media(max-width:600px){ .main-box { grid-template-columns: 1fr; } }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .cal-head { display: flex; justify-content: space-between; margin-bottom: 15px; }
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .day { aspect-ratio: 1; border: 1px solid #e5e7eb; border-radius: 4px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; padding: 2px; font-size: 12px; }
+        .day:hover { background: #f3f4f6; }
+        .day.selected { background: #e0e7ff; border-color: var(--primary); }
+        .day.today { font-weight: bold; border: 2px solid var(--primary); }
+        .badge { font-size: 10px; background: #e0e7ff; color: var(--primary); border-radius: 3px; padding: 1px; }
+        .badge.imp { background: #fee2e2; color: var(--danger); }
+        .item { padding: 8px; border: 1px solid #e5e7eb; border-radius: 4px; margin-bottom: 5px; display: flex; justify-content: space-between; background: #fafafa; font-size: 13px; }
+        .item.imp-item { border-left: 4px solid var(--danger); }
+        input, textarea { width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 4px; }
+        button { background: var(--primary); color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; width: 100%; }
+        .search-bar { padding: 6px; border-radius: 4px; border: 1px solid #e5e7eb; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 style="color:var(--primary); font-size:20px;">Campus Calendar</h1>
+        <input type="text" id="sch" class="search-bar" placeholder="일정 제목 검색..." style="width:180px; margin:0;">
+    </header>
+    <div class="main-box">
+        <div class="card">
+            <div class="cal-head">
+                <button onclick="moveM(-1)" style="width:auto; padding:4px 8px;">&lt;</button>
+                <h3 id="calT"></h3>
+                <button onclick="moveM(1)" style="width:auto; padding:4px 8px;">&gt;</button>
+            </div>
+            <div class="grid" id="grid"></div>
+        </div>
+        <div class="card">
+            <h4 id="selT" style="margin-bottom:10px; color:var(--primary);"></h4>
+            <div id="list" style="margin-bottom:15px; max-height:150px; overflow-y:auto;"></div>
+            <form onsubmit="addE(event)">
+                <input type="text" id="tTitle" placeholder="일정 제목 *" required>
+                <textarea id="tDesc" placeholder="상세 내용" rows="2"></textarea>
+                <label style="font-size:12px; color:var(--danger); display:flex; align-items:center; gap:4px; margin-bottom:8px;">
+                    <input type="checkbox" id="tImp" style="width:auto; margin:0;"> 중요 일정
+                </label>
+                <button type="submit">저장하기</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        let cur = new Date(), sel = fDate(cur), ev = JSON.parse(localStorage.getItem('cc_ev')) || {};
+        function fDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+        function init() { render(); rList(); document.getElementById('sch').addEventListener('input', search); }
+        function render() {
+            const y = cur.getFullYear(), m = cur.getMonth();
+            document.getElementById('calT').innerText = `${y}년 ${m+1}월`;
+            const g = document.getElementById('grid'); g.innerHTML = '';
+            ['일','월','화','수','목','금','토'].forEach(w => { const d = document.createElement('div'); d.innerText = w; d.style.fontSize='12px'; d.style.color='#6b7280'; g.appendChild(d); });
+            const first = new Date(y, m, 1).getDay(), total = new Date(y, m+1, 0).getDate(), today = fDate(new Date());
+            for(let i=0; i<first; i++) g.appendChild(document.createElement('div'));
+            for(let i=1; i<=total; i++) {
+                const d = document.createElement('div'); d.className = 'day'; const dStr = `${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+                d.innerHTML = `<span>${i}</span>`;
+                if(dStr === today) d.classList.add('today');
+                if(dStr === sel) d.classList.add('selected');
+                if(ev[dStr] && ev[dStr].length > 0) {
+                    const b = document.createElement('div'); b.className = 'badge' + (ev[dStr].some(e=>e.imp)?' imp':'');
+                    b.innerText = `${ev[dStr].length}건`; d.appendChild(b);
+                }
+                d.onclick = () => { sel = dStr; document.querySelectorAll('.day').forEach(c=>c.classList.remove('selected')); d.classList.add('selected'); rList(); };
+                g.appendChild(d);
+            }
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Noto Sans KR', sans-serif;
+        function rList() {
+            const t = document.getElementById('selT'), l = document.getElementById('list');
+            t.innerText = `📌 ${sel}`; l.innerHTML = ''; const list = ev[sel] || [];
+            if(list.length === 0) { l.innerHTML = '<p style="font-size:12px; color:#6b7280;">일정이 없습니다.</p>'; return; }
+            list.forEach(e => {
+                const d = document.createElement('div'); d.className = 'item' + (e.imp?' imp-item':'');
+                d.innerHTML = `<div><strong>${e.imp?'[🔥] ':''}${esc(e.title)}</strong><p style="font-size:11px; color:#6b7280;">${esc(e.desc)}</p></div><span onclick="delE('${sel}','${e.id}')" style="cursor:pointer; color:#ef4444; font-size:12px;">삭제</span>`;
+                l.appendChild(d);
+            });
         }
-
-        body {
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            padding: 20px;
-            line-height: 1.6;
+        function addE(e) {
+            e.preventDefault(); const title = document.getElementById('tTitle').value.trim(), desc = document.getElementById('tDesc').value.trim(), imp = document.getElementById('tImp').checked;
+            if(!title) return; if(!ev[sel]) ev[sel] = []; ev[sel].push({ id: Date.now().toString(), title, desc, imp });
+            localStorage.setItem('cc_ev', JSON.stringify(ev)); render(); rList(); document.getElementById('tTitle').value=''; document.getElementById('tDesc').value=''; document.getElementById('tImp').checked=false;
         }
-
-        /* -------------------------------------------------------------------------- */
-        /* 2
+        function delE(dStr, id) { if(confirm("삭제하시겠습니까?")) { ev[dStr] = ev[dStr].filter(e=>e.id!==id); if(ev[dStr].length===0) delete ev[dStr]; localStorage.setItem('cc_ev', JSON.stringify(ev)); render(); rList(); } }
+        function moveM(v) { cur.setMonth(cur.getMonth() + v); render(); }
+        function search(e) {
+            const q = e.target.value.trim().toLowerCase(), l = document.getElementById('list'); if(!q) { rList(); return; }
+            l.innerHTML = ''; Object.keys(ev).forEach(d => { ev[d].forEach(evnt => { if(evnt.title.toLowerCase().includes(q)) {
+                const div = document.createElement('div'); div.className = 'item'; div.innerHTML = `<div><small>${d}</small><br><strong>${evnt.title}</strong></div>`; l.appendChild(div);
+            }})});
+        }
+        function esc(t) { return t.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]); }
+        window.onload = init;
+    </script>
+</body>
+</html>
